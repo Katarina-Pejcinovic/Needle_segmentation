@@ -7,6 +7,20 @@ from keras import backend as K
 import os
 import tensorflow as tf
 from PIL import Image
+import tensorflow as tf
+from tensorflow import keras
+
+def weighted_BCE_loss(y_true, y_pred, positive_weight=5):
+   # y_true: (None,None,None,None)     y_pred: (None,512,512,1)
+   y_pred = K.clip(y_pred, min_value=1e-12, max_value=1 - 1e-12)
+   weights = K.ones_like(y_pred)  # (None,512,512,1)
+   weights = tf.where(y_pred < 0.5, positive_weight * weights, weights)
+   # weights[y_pred<0.5]=positive_weight
+   out = keras.losses.binary_crossentropy(y_true, y_pred)  # (None,512,512)
+   out = K.expand_dims(out, axis=-1) * weights  # (None,512,512,1)* (None,512,512,1)
+   return K.mean(out)
+
+
 
 def f1_score(y_true, y_pred):
    
@@ -25,14 +39,14 @@ def f1_score(y_true, y_pred):
 
 model_path = 'saved_model'
 # Load the model
-loaded_model = tf.keras.models.load_model(model_path, custom_objects={'f1_score': f1_score})
+loaded_model = tf.keras.models.load_model(model_path, custom_objects={'f1_score': f1_score, 'weighted_BCE_loss': weighted_BCE_loss})
 print("Model loaded successfully.")
 
 #get mini test set 
-#mini_test = make_smaller_pkl('data/test_images.pkl')
-with open('data/test_images.pkl', 'rb') as f:
-    test = pickle.load(f)
-print("test", test.shape)
+test = make_smaller_pkl('data/test_images.pkl')
+# with open('data/test_images.pkl', 'rb') as f:
+#     test = pickle.load(f)
+# print("test", test.shape)
 
 masks_pred = loaded_model.predict(test)
 
@@ -55,9 +69,9 @@ def display_image_and_mask(image, mask):
 
     plt.show()
 
-# Display original images and predicted masks
-# for i in range(test.shape[0]):
-#     display_image_and_mask(test[i], masks_pred[i])
+#Display original images and predicted masks
+for i in range(test.shape[0]):
+    display_image_and_mask(test[i], masks_pred[i])
 
 #load in test_numbers.pkl
 with open('data/test_numbers.pkl', 'rb') as f:

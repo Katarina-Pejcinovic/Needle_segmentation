@@ -8,6 +8,35 @@ from make_sample_test import make_smaller_pkl, make_smaller
 from keras import backend as K
 import pandas as pd 
 import matplotlib.pyplot as plt
+import tensorflow as tf
+import os
+from PIL import Image
+
+
+class BatchLossHistory(tf.keras.callbacks.Callback):
+    def __init__(self):
+        super(BatchLossHistory, self).__init__()
+        self.batch_losses = []
+
+    def on_train_batch_end(self, batch, logs=None):
+        self.batch_losses.append(logs['loss'])
+
+    def on_train_end(self, logs=None):
+        plt.plot(self.batch_losses)
+        plt.title('Loss per Batch')
+        plt.xlabel('Batch Number')
+        plt.ylabel('Loss')
+        plt.show()
+
+def weighted_BCE_loss(y_true, y_pred, positive_weight=2):
+   # y_true: (None,None,None,None)     y_pred: (None,512,512,1)
+   y_pred = K.clip(y_pred, min_value=1e-12, max_value=1 - 1e-12)
+   weights = K.ones_like(y_pred)  # (None,512,512,1)
+   weights = tf.where(y_pred < 0.5, positive_weight * weights, weights)
+   # weights[y_pred<0.5]=positive_weight
+   out = keras.losses.binary_crossentropy(y_true, y_pred)  # (None,512,512)
+   out = K.expand_dims(out, axis=-1) * weights  # (None,512,512,1)* (None,512,512,1)
+   return K.mean(out)
 
 #define U-net architecture 
 def double_conv_block(x, n_filters):
@@ -90,7 +119,7 @@ def f1_score(y_true, y_pred):
 
 unet_model = build_unet_model()
 unet_model.compile(optimizer=tf.keras.optimizers.Adam(),
-                  loss="binary_crossentropy",
+                  loss=weighted_BCE_loss,
                   metrics=f1_score)
 
 #make dataset tensorflow-compatible
@@ -100,7 +129,7 @@ with open('data/images_data.pkl', 'rb') as f:
 with open('data/masks_data.pkl', 'rb') as f:
     masks = pickle.load(f)
 
-#make mini dataset for testing code
+# # make mini dataset for testing code
 images = make_smaller(images)
 masks = make_smaller(masks)
 
@@ -117,23 +146,72 @@ total_num_samples = images.shape[0]
 steps = total_num_samples//batch_size
 
 print("steps per epoch", steps)
+
 #train u-net
-model_history = unet_model.fit(dataset,
-                              epochs = 3,
-                              steps_per_epoch = steps)
+# Instantiate the custom callback
+batch_loss_history = BatchLossHistory()
+model_history = unet_model.fit(dataset, epochs = 1, steps_per_epoch = steps, callbacks=[batch_loss_history])
 
 # Specify the path to save the model
-model_path = 'saved_model'
-# Save the model
-print("heres")
-unet_model.save(model_path)
+# model_path = 'saved_model'
+# unet_model.save(model_path)
 
-# Plot training loss
-plt.plot(model_history.history['loss'], label='Training Loss')
-print(model_history.history['loss'])
-plt.xlabel('Epoch')
-plt.ylabel('Loss')
-plt.title('Training and Validation Loss')
-plt.legend()
-plt.show()
+#get mini test set 
+# test = make_smaller_pkl('data/test_images.pkl')
 
+
+with open('data/test_images.pkl', 'rb') as f:
+    test = pickle.load(f)
+print("test", test.shape)
+
+masks_pred = unet_model.predict(test)
+
+
+#save the predicted_masks
+save_dir = 'outputs/'
+
+#load in test_numbers.pkl
+with open('data/test_numbers.pkl', 'rb') as f:
+    numbers = pickle.load(f)
+
+def save_images_as_png(images_stack, numbers_array, output_directory):
+    # Create the output directory if it does not exist
+    os.makedirs(output_directory, exist_ok=True)
+
+    # Iterate through the images stack and numbers array simultaneously
+    for img_array, number in zip(images_stack, numbers_array):
+        # Convert numpy array to PIL Image
+        img_array = (img_array * 255).astype(np.uint8)
+        img = Image.fromarray(img_array.squeeze(axis=-1))  # Remove singleton channel axis if present
+
+        # Save image as PNG with the desired filename format
+        filename = os.path.join(output_directory, f"{number}.png")
+        img = img.convert('L')
+        img.save(filename)
+
+        print(f"Saved image {number}.png")
+
+save_images_as_png(masks_pred, numbers, 'output_images_real')
+
+def display_image_and_mask(image, mask):
+    plt.figure(figsize=(10, 5))
+    plt.subplot(1, 2, 1)
+    plt.imshow(image[:, :, 0], cmap='gray')  # Display the first channel (grayscale)
+    plt.title('Original Image')
+    plt.axis('off')
+
+    plt.subplot(1, 2, 2)
+    plt.imshow(mask[:, :, 0], cmap='gray')  # Display the first channel of mask
+    plt.title('Predicted Mask')
+    plt.axis('off')
+
+    plt.show()
+
+#Display original images and predicted masks
+for i in range(test.shape[0]):
+    display_image_and_mask(test[i], masks_pred[i])
+
+
+# #Display original images and predicted masks
+# for i in range(test.shape[0]):
+#     display_image_and_mask(test[i], masks_pred[i])
