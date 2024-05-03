@@ -1,6 +1,6 @@
+import os
 import tensorflow as tf
 from tensorflow import keras
-import keras.api._v2.keras as keras
 from keras import layers
 import numpy as np
 import pickle 
@@ -9,9 +9,14 @@ from keras import backend as K
 import pandas as pd 
 import matplotlib.pyplot as plt
 import tensorflow as tf
-import os
 from PIL import Image
+from sklearn.model_selection import StratifiedKFold
+# from tensorflow.keras.utils import plot_model
 
+# print("Available devices:")
+# print(tf.config.list_physical_devices())
+
+####################### functions and classes for running model #####################
 
 class BatchLossHistory(tf.keras.callbacks.Callback):
     def __init__(self):
@@ -26,19 +31,23 @@ class BatchLossHistory(tf.keras.callbacks.Callback):
         plt.title('Loss per Batch')
         plt.xlabel('Batch Number')
         plt.ylabel('Loss')
-        plt.show()
+        #plt.show()
+        plt.savefig('figures/batch_loss.png')
 
-def weighted_BCE_loss(y_true, y_pred, positive_weight=2):
-   # y_true: (None,None,None,None)     y_pred: (None,512,512,1)
-   y_pred = K.clip(y_pred, min_value=1e-12, max_value=1 - 1e-12)
-   weights = K.ones_like(y_pred)  # (None,512,512,1)
-   weights = tf.where(y_pred < 0.5, positive_weight * weights, weights)
-   # weights[y_pred<0.5]=positive_weight
-   out = keras.losses.binary_crossentropy(y_true, y_pred)  # (None,512,512)
-   out = K.expand_dims(out, axis=-1) * weights  # (None,512,512,1)* (None,512,512,1)
-   return K.mean(out)
+def weighted_BCE(target, output, weights = [200, 1]):
+    target = tf.convert_to_tensor(target)
+    output = tf.convert_to_tensor(output)
+    weights = tf.convert_to_tensor(weights, dtype=target.dtype)
 
-#define U-net architecture 
+    epsilon_ = tf.constant(tf.keras.backend.epsilon(), output.dtype.base_dtype)
+    output = tf.clip_by_value(output, epsilon_, 1.0 - epsilon_)
+
+    # Compute cross entropy from probabilities.
+    bce = weights[1] * target * tf.math.log(output + epsilon_)
+    bce += weights[0] * (1 - target) * tf.math.log(1 - output + epsilon_)
+    return -bce
+
+######################### define U-net architecture ################################
 def double_conv_block(x, n_filters):
 
    # Conv2D then ReLU activation
@@ -95,32 +104,34 @@ def build_unet_model():
    u9 = upsample_block(u8, f1, 32)
 
    # outputs
-   outputs = layers.Conv2D(1, 1, padding="same", activation="sigmoid")(u9)  # Use 1 channel for binary mask
+   outputs = layers.Conv2D(1, (1,1), padding="same", activation = 'sigmoid')(u9) 
 
    # unet model with Keras Functional API
    unet_model = tf.keras.Model(inputs, outputs, name="U-Net")
 
    return unet_model
 
-def f1_score(y_true, y_pred):
-   
-    y_true = K.flatten(y_true)
-    y_pred = K.round(K.flatten(y_pred))
+def dice_coefficient(y_true, y_pred, smooth=1e-6):
     
-    tp = K.sum(y_true * y_pred)  # True Positives
-    fp = K.sum((1 - y_true) * y_pred)  # False Positives
-    fn = K.sum(y_true * (1 - y_pred))  # False Negatives
-    
-    precision = tp / (tp + fp + K.epsilon())
-    recall = tp / (tp + fn + K.epsilon())
-    
-    f1 = 2 * (precision * recall) / (precision + recall + K.epsilon())
-    return f1
+    y_true = tf.cast(y_true, dtype=tf.float32)
+    y_pred = tf.cast(y_pred, dtype=tf.float32)
+
+    y_true_flat = tf.reshape(y_true, [-1])
+    y_pred_flat = tf.reshape(y_pred, [-1])
+
+    # Calculate intersection and union
+    intersection = tf.reduce_sum(y_true_flat * y_pred_flat)
+    union = tf.reduce_sum(y_true_flat) + tf.reduce_sum(y_pred_flat)
+
+    # Compute the Dice coefficient
+    dice = (2. * intersection + smooth) / (union + smooth)
+    return dice
 
 unet_model = build_unet_model()
+# plot_model(unet_model, to_file='unet_model.png', show_shapes=True, show_layer_names=True)
 unet_model.compile(optimizer=tf.keras.optimizers.Adam(),
-                  loss=weighted_BCE_loss,
-                  metrics=f1_score)
+                  loss= 'binary_crossentropy',
+                  metrics= [dice_coefficient])
 
 #make dataset tensorflow-compatible
 with open('data/images_data.pkl', 'rb') as f:
@@ -129,69 +140,82 @@ with open('data/images_data.pkl', 'rb') as f:
 with open('data/masks_data.pkl', 'rb') as f:
     masks = pickle.load(f)
 
-# # make mini dataset for testing code
-images = make_smaller(images)
-masks = make_smaller(masks)
-
+# make mini dataset for testing code
+# images = make_smaller(images)
+# masks = make_smaller(masks)
 # Create TensorFlow dataset from images and masks
-dataset = tf.data.Dataset.from_tensor_slices((images, masks))
+#dataset = tf.data.Dataset.from_tensor_slices((images, masks))
 
-# Define batch size
-batch_size = 5
-
-# Batch and shuffle the dataset
-dataset = dataset.batch(batch_size).shuffle(buffer_size=1000)
-
+# Batches
+batch_size = 30
+epochs = 1
+#dataset = dataset.batch(batch_size).repeat(count = epochs)
 total_num_samples = images.shape[0]
 steps = total_num_samples//batch_size
 
 print("steps per epoch", steps)
 
 #train u-net
-# Instantiate the custom callback
 batch_loss_history = BatchLossHistory()
-model_history = unet_model.fit(dataset, epochs = 1, steps_per_epoch = steps, callbacks=[batch_loss_history])
-
-# Specify the path to save the model
-# model_path = 'saved_model'
-# unet_model.save(model_path)
+# model_history = unet_model.fit(dataset, epochs = epochs, steps_per_epoch = steps, callbacks=[batch_loss_history])
 
 #get mini test set 
-# test = make_smaller_pkl('data/test_images.pkl')
+#test = make_smaller_pkl('data/test_processed.pkl')
 
+#######################functions for predictions and validations#######################
+def apply_threshold(predictions, threshold=0.5):
+    """Apply a binary threshold to segmentation predictions."""
+    unique_elements, counts = np.unique(predictions, return_counts=True)
+    #for element, count in zip(unique_elements, counts):
+        #print("before thresholding", f"{count} {element}s")
+    
+    # Threshold the predictions
+    predictions_thresholded = np.where(predictions < threshold, 0, 1)
+    unique_elements, counts = np.unique(predictions_thresholded, return_counts=True)
 
-with open('data/test_images.pkl', 'rb') as f:
-    test = pickle.load(f)
-print("test", test.shape)
+    # Display the unique elements with their counts
+    #for element, count in zip(unique_elements, counts):
+        #print("After thresholding", f"{count} {element}s")
 
-masks_pred = unet_model.predict(test)
-
-
-#save the predicted_masks
-save_dir = 'outputs/'
-
-#load in test_numbers.pkl
-with open('data/test_numbers.pkl', 'rb') as f:
-    numbers = pickle.load(f)
+    return predictions_thresholded
 
 def save_images_as_png(images_stack, numbers_array, output_directory):
     # Create the output directory if it does not exist
     os.makedirs(output_directory, exist_ok=True)
+    print("images stack", images_stack.shape)
 
     # Iterate through the images stack and numbers array simultaneously
     for img_array, number in zip(images_stack, numbers_array):
         # Convert numpy array to PIL Image
         img_array = (img_array * 255).astype(np.uint8)
+        #print("img_array", img_array.shape)
         img = Image.fromarray(img_array.squeeze(axis=-1))  # Remove singleton channel axis if present
-
-        # Save image as PNG with the desired filename format
-        filename = os.path.join(output_directory, f"{number}.png")
+        #unique_elements, counts = np.unique(img, return_counts=True)
+        # Display the unique elements with their counts
+        # for element, count in zip(unique_elements, counts):
+        #     print("saving", f"{count} {element}s")
+        
+        filename = os.path.join(output_directory, f"{number}_mask.png")
         img = img.convert('L')
         img.save(filename)
 
-        print(f"Saved image {number}.png")
+        #print(f"Saved image {number}.png")
 
-save_images_as_png(masks_pred, numbers, 'output_images_real')
+def predict_in_batches(data, numbers, batch_size=30):
+    num_samples = data.shape[0]
+    batch_numbers = []
+
+    for start in range(0, num_samples, batch_size):
+        end = min(start + batch_size, num_samples)
+
+        #make predictions 
+        batch_predictions = unet_model.predict(data[start:end])
+        print("batch_predictions", batch_predictions.shape)
+        batch_numbers = numbers[start:end]
+        print("batch_numbers", len(batch_numbers), '\n', batch_numbers)
+        predictions_thresh = apply_threshold(batch_predictions)
+        print("predictions thresh", predictions_thresh.shape)
+        #save_images_as_png(predictions_thresh, batch_numbers, 'output_images')
 
 def display_image_and_mask(image, mask):
     plt.figure(figsize=(10, 5))
@@ -206,10 +230,77 @@ def display_image_and_mask(image, mask):
     plt.axis('off')
 
     plt.show()
+###################### Stratified Cross Validation##################
+#load in labels for stratifying 
+with open('data/strat_labels.pkl', 'rb') as f:
+    labels = pickle.load(f)
 
-#Display original images and predicted masks
-for i in range(test.shape[0]):
-    display_image_and_mask(test[i], masks_pred[i])
+#numbers for saving images 
+with open('data/test_numbers.pkl', 'rb') as f:
+    numbers = pickle.load(f)
+print("numbers", numbers.shape)
+
+# Number of splits
+n_splits = 3
+
+# Create the StratifiedKFold object
+skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+print("starting cross validation")
+
+fold_no = 1
+for train_index, val_index in skf.split(images, labels):
+    train_dataset = tf.data.Dataset.from_tensor_slices((images[train_index], masks[train_index]))
+    train_dataset = train_dataset.batch(batch_size).repeat(count = epochs)
+    val_images = images[val_index]
+    val_masks = masks[val_index]
+
+    # for images, masks in dataset.take(1):
+    #     print("Batched images shape:", images.shape)  # e.g., (16, 512, 512, 1)
+    #     print("Batched masks shape:", masks.shape)    # e.g., (16, 512, 512, 1)
+    # train model
+    print(f"Training on fold {fold_no}")
+    unet_model.compile(optimizer=tf.keras.optimizers.Adam(),
+                  loss= 'binary_crossentropy',
+                  metrics= [dice_coefficient])
+    model_history = unet_model.fit(train_dataset, epochs = epochs, steps_per_epoch = steps, callbacks=[batch_loss_history])
+    
+    #validate model
+    print("validating model")
+    predict_in_batches(val_images, numbers)
+
+    fold_no += 1
+
+################### miscellaneous ###########################
+
+with open('data/images_data.pkl', 'rb') as f:
+    images = pickle.load(f)
+
+# # # make mini dataset for testing code
+train = make_smaller(images)
+
+with open('data/test_numbers.pkl', 'rb') as f:
+    numbers = pickle.load(f)
+print("numbers", numbers.shape)
+
+with open('data/test_processed.pkl', 'rb') as f:
+    test = pickle.load(f)
+
+print("test", test.shape)
+print("test sample", test[0, :, :, 0])
+
+#predict_in_batches(images, numbers)
+
+
+
+# predictions = unet_model.predict(train)
+# for i in range(train.shape[0]):
+#     display_image_and_mask(train[i], predictions[i])
+
+# predictions = apply_threshold(predictions)
+
+# #Display original images and predicted masks
+# for i in range(train.shape[0]):
+#     display_image_and_mask(train[i], predictions[i])
 
 
 # #Display original images and predicted masks
