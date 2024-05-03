@@ -38,9 +38,12 @@ import numpy as np
 
 # Convert the data type to float
 image_stack = images_4d.astype(np.float32)
+mask_stack = masks_4d.astype(np.float32)
 
 # Normalize the image stack to [0, 1]
 image_stack /= 255.0
+image_stack = image_stack.astype('float32')
+mask_stack /= 255.0
 image_stack = image_stack.astype('float32')
 
 # Now, your image_stack is normalized along the entire stack
@@ -49,9 +52,47 @@ print(image_stack[0, :, :, :].shape)
 print(image_stack.dtype)
 print(masks_4d.dtype)
 
+print(masks_4d[0, :, :, :])
+print(mask_stack[0, :, :, :].shape)
+
+print(mask_stack.dtype)
+unique_elements, counts = np.unique(masks_4d, return_counts=True)
+for element, count in zip(unique_elements, counts):
+    print("before thresholding", f"{count} {element}s")
+
 
 save_dataset(image_stack, "data/images_data.pkl")
-save_dataset(masks_4d, "data/masks_data.pkl")
+save_dataset(mask_stack, "data/masks_data.pkl")
+
+
+##############make binary labels for stratified k-fold############################
+
+# Assuming `masks` is your numpy array of masks
+labels = np.array([np.any(mask == 1) for mask in mask_stack]).astype(int)
+print(labels)
+
+save_dataset(labels, "data/strat_labels.pkl")
+##############################preprocess test set############################
+
+# with open('data/test_images.pkl', 'rb') as f:
+#     test = pickle.load(f)
+# print("shape", test.shape)
+# # #normalize the data 
+
+# # Convert the data type to float
+# image_stack = test.astype(np.float32)
+
+# # Normalize the image stack to [0, 1]
+# image_stack /= 255.0
+# image_stack = image_stack.astype('float32')
+
+# # Now, your image_stack is normalized along the entire stack
+# print(image_stack.shape)
+# print(image_stack[0, :, :, :])
+# print(image_stack.dtype)
+
+
+# save_dataset(image_stack, "data/test_processed.pkl")
 
 
 

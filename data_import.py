@@ -46,11 +46,28 @@ mask_directory = "/Users/katarinapejcinovic/Library/CloudStorage/OneDrive-UCLAIT
 save_path = "dataset_dict.pkl"
 
 # Load images and masks into dictionary
-dataset2D = load_images_and_masks(image_directory, mask_directory)
+#dataset2D = load_images_and_masks(image_directory, mask_directory)
 
 # Save dataset
-save_dataset(dataset2D, save_path)
+#save_dataset(dataset2D, save_path)
 
+# with open('dataset_dict.pkl', 'rb') as f:
+#     dataset = pickle.load(f)
+
+#check if dictionary outputs expected results
+# print(dataset.keys())
+# number_to_access = "1164"
+# if number_to_access in dataset:
+#     image, mask = dataset[number_to_access]
+#     print(f"Image shape: {image.shape}, Mask shape: {mask.shape}")
+#     image1 = Image.fromarray(mask)
+#     image2 = Image.fromarray(image)
+#     image1.show()
+#     image2.show()
+
+
+# else:
+#     print(f"No data found for number {number_to_access}")
     # # Example usage:
     # # Access image and mask for a specific number
     # number_to_access = "12345"  # Use the full ID number here
