@@ -48,6 +48,7 @@ def weighted_BCE(target, output, weights = [200, 1]):
     return -bce
 
 ######################### define U-net architecture ################################
+
 def double_conv_block(x, n_filters):
 
    # Conv2D then ReLU activation
@@ -218,6 +219,7 @@ def predict_in_batches(data, numbers, batch_size=30):
         #save_images_as_png(predictions_thresh, batch_numbers, 'output_images')
 
 def display_image_and_mask(image, mask):
+
     plt.figure(figsize=(10, 5))
     plt.subplot(1, 2, 1)
     plt.imshow(image[:, :, 0], cmap='gray')  # Display the first channel (grayscale)
@@ -246,29 +248,47 @@ n_splits = 3
 # Create the StratifiedKFold object
 skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
 print("starting cross validation")
+metrics_summary = pd.DataFrame(columns=['Fold', 'Dice Coefficient'])
 
 fold_no = 1
 for train_index, val_index in skf.split(images, labels):
     train_dataset = tf.data.Dataset.from_tensor_slices((images[train_index], masks[train_index]))
     train_dataset = train_dataset.batch(batch_size).repeat(count = epochs)
-    val_images = images[val_index]
-    val_masks = masks[val_index]
+    val_dataset = tf.data.Dataset.from_tensor_slices((images[val_index], masks[val_index]))
+    val_dataset = val_dataset.batch(batch_size)  # Assuming batch_size is defined
 
     # for images, masks in dataset.take(1):
     #     print("Batched images shape:", images.shape)  # e.g., (16, 512, 512, 1)
     #     print("Batched masks shape:", masks.shape)    # e.g., (16, 512, 512, 1)
+    
     # train model
     print(f"Training on fold {fold_no}")
+    unet_model = build_unet_model()
     unet_model.compile(optimizer=tf.keras.optimizers.Adam(),
                   loss= 'binary_crossentropy',
                   metrics= [dice_coefficient])
+    steps = images[train_index].shape[0]//batch_size
+    print("steps in fold", steps)
     model_history = unet_model.fit(train_dataset, epochs = epochs, steps_per_epoch = steps, callbacks=[batch_loss_history])
     
     #validate model
     print("validating model")
-    predict_in_batches(val_images, numbers)
+    #predict_in_batches(val_images, numbers)
+    eval_metrics = unet_model.evaluate(val_dataset, verbose=0)
+    # Create a DataFrame for the current fold's metrics
+    current_fold_metrics = pd.DataFrame({
+        'Fold': [fold_no],
+        'Loss': [eval_metrics[0]],
+        'Dice Coefficient': [eval_metrics[1]]
+    })
+
+    # Concatenate the current fold's metrics DataFrame with the main summary DataFrame
+    metrics_summary = pd.concat([metrics_summary, current_fold_metrics], 
+                                ignore_index=True)
 
     fold_no += 1
+
+print(metrics_summary)
 
 ################### miscellaneous ###########################
 
