@@ -4,15 +4,13 @@ from tensorflow import keras
 from keras import layers
 import numpy as np
 import pickle 
-from make_sample_test import make_smaller_pkl, make_smaller
-from keras import backend as K
+from make_sample_test import make_smaller
 import pandas as pd 
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from PIL import Image
 from sklearn.model_selection import StratifiedKFold
 # from tensorflow.keras.utils import plot_model
-
 # print("Available devices:")
 # print(tf.config.list_physical_devices())
 
