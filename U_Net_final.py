@@ -12,12 +12,9 @@ from PIL import Image
 from sklearn.model_selection import StratifiedKFold
 from pandas.plotting import table 
 
-# from tensorflow.keras.utils import plot_model
-# print("Available devices:")
-# print(tf.config.list_physical_devices())
 
 ####################### functions and classes for running model #####################
-#### TO DO #### LOSS PER EPOCH NOT BATCHES
+
 class BatchLossHistory(tf.keras.callbacks.Callback):
     def __init__(self):
         super(BatchLossHistory, self).__init__()
@@ -146,14 +143,52 @@ def dice_coefficient(y_true, y_pred, smooth=1e-6):
     return dice
 
 
-# # plot_model(unet_model, to_file='unet_model.png', show_shapes=True, show_layer_names=True)
+################### run on whole dataset ###########################
+with open('data/images_data.pkl', 'rb') as f:
+    images = pickle.load(f)
 
-# model_history = unet_model.fit(dataset, epochs = epochs, steps_per_epoch = steps, callbacks=[batch_loss_history])
+with open('data/masks_data.pkl', 'rb') as f:
+    masks = pickle.load(f)
 
-#get mini test set 
-#test = make_smaller_pkl('data/test_processed.pkl')
+# initialize variables
+batch_size = 30
+epochs = 30
+threshold = 0.9
 
-#######################functions for predictions and validations#######################
+total_num_samples = images.shape[0]
+steps = total_num_samples//batch_size
+print("steps per epoch", steps)
+
+batch_loss_history = BatchLossHistory()
+
+# make mini dataset for testing code
+# images = make_smaller(images)
+# masks = make_smaller(masks)
+
+#Create TensorFlow dataset from images and masks
+dataset = tf.data.Dataset.from_tensor_slices((images, masks))
+dataset = dataset.batch(batch_size).repeat(count = epochs)
+
+with open('data/test_numbers.pkl', 'rb') as f:
+    numbers = pickle.load(f)
+print("numbers", numbers.shape)
+
+with open('data/test_processed.pkl', 'rb') as f:
+    test = pickle.load(f)
+
+# print("test", test.shape)
+# print("test sample", test[0, :, :, 0])
+
+#train model 
+unet_model = build_unet_training_model()
+unet_model.compile(optimizer=tf.keras.optimizers.Adam(),
+                loss= weighted_BCE,
+                metrics= [dice_coefficient, tf.keras.metrics.Recall()])
+
+model_history = unet_model.fit(dataset, epochs = epochs, steps_per_epoch = steps, callbacks=[batch_loss_history])
+
+####################### functions for predictions and validations #######################
+
 def apply_threshold(predictions, threshold):
     """Apply a binary threshold to segmentation predictions."""
     unique_elements, counts = np.unique(predictions, return_counts=True)
@@ -192,7 +227,7 @@ def save_images_as_png(images_stack, numbers_array, output_directory):
 
         #print(f"Saved image {number}.png")
 
-def predict_in_batches(data, numbers, batch_size=30):
+def predict_in_batches(data, numbers, batch_size, threshold):
     num_samples = data.shape[0]
     batch_numbers = []
 
@@ -204,11 +239,12 @@ def predict_in_batches(data, numbers, batch_size=30):
         print("batch_predictions", batch_predictions.shape)
         batch_numbers = numbers[start:end]
         print("batch_numbers", len(batch_numbers), '\n', batch_numbers)
-        predictions_thresh = apply_threshold(batch_predictions)
+        predictions_thresh = apply_threshold(batch_predictions, threshold)
         print("predictions thresh", predictions_thresh.shape)
         save_images_as_png(predictions_thresh, batch_numbers, 'output_images')
 
 def display_image_and_mask(image, mask, predicted, thresholded):
+
 
     plt.figure(figsize=(10, 5))
     plt.subplot(1, 4, 1)
@@ -234,175 +270,6 @@ def display_image_and_mask(image, mask, predicted, thresholded):
     plt.axis('off')
 
     plt.show()
-###################### Stratified Cross Validation##################
-#make dataset tensorflow-compatible
-with open('data/images_data.pkl', 'rb') as f:
-    images = pickle.load(f)
 
-with open('data/masks_data.pkl', 'rb') as f:
-    masks = pickle.load(f)
-
-# Batches
-batch_size = 30
-epochs = 20
-threshold = 0.92
-
-#dataset = dataset.batch(batch_size).repeat(count = epochs)
-total_num_samples = images.shape[0]
-
-#load in labels for stratifying 
-with open('data/strat_labels.pkl', 'rb') as f:
-    labels = pickle.load(f)
-
-#numbers for saving image IDs 
-with open('data/test_numbers.pkl', 'rb') as f:
-    numbers = pickle.load(f)
-
-print("numbers", numbers.shape)
-batch_loss_history = BatchLossHistory()
-
-# images = make_smaller(images)
-# masks = make_smaller(masks)
-
-# Number of splits
-n_splits = 3
-
-# Create the StratifiedKFold object
-skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
-print("starting cross validation")
-metrics_summary = pd.DataFrame(columns=['Fold', 'Loss', 'Dice Coefficient', 'Recall'])
-
-fold_no = 1
-for train_index, val_index in skf.split(images, labels):
-    train_dataset = tf.data.Dataset.from_tensor_slices((images[train_index], masks[train_index]))
-    train_dataset = train_dataset.batch(batch_size).repeat(count = epochs)
-    val_dataset = tf.data.Dataset.from_tensor_slices((images[val_index], masks[val_index]))
-    val_dataset = val_dataset.batch(batch_size) 
-    # Extract only the images using a lambda function
-    image_dataset = val_dataset.map(lambda image, _: image)
-
-    # for images, masks in dataset.take(1):
-    #     print("Batched images shape:", images.shape)  
-    #     print("Batched masks shape:", masks.shape)   
-    
-    # train model
-    print(f"Training on fold {fold_no}")
-    unet_model = build_unet_training_model()
-    unet_model.compile(optimizer=tf.keras.optimizers.Adam(),
-                  loss= weighted_BCE,
-                  metrics= [dice_coefficient, tf.keras.metrics.Recall()])
-    
-    steps = images[train_index].shape[0]//batch_size
-    model_history = unet_model.fit(train_dataset, epochs = epochs, steps_per_epoch = steps, callbacks=[batch_loss_history])
-    
-    #validate model
-    print("validating model")
-
-    #predict_in_batches(val_images, numbers)
-    unet_inference_model = build_unet_inference_model(threshold= threshold)
-    unet_inference_model.set_weights(unet_model.get_weights())
-    unet_inference_model.compile(optimizer=tf.keras.optimizers.Adam(),
-                  loss= weighted_BCE,
-                  metrics= [dice_coefficient, tf.keras.metrics.Recall()])
-    
-    eval_metrics = unet_inference_model.evaluate(val_dataset, verbose=0)
- 
-    masks_pred = unet_model.predict(image_dataset)
-    print("masks pred", masks_pred[:, :, 0])
-    masks_thresh = unet_inference_model.predict(image_dataset)
-
-    #print images of original, mask, and predicted 
-    # for i in range(images[val_index].shape[0]):
-    #     display_image_and_mask(images[val_index][i], masks[val_index][i], masks_pred[i], masks_thresh[i])
-
-    # Create a DataFrame for the current fold's metrics
-    current_fold_metrics = pd.DataFrame({
-        'Fold': [fold_no],
-        'Loss': [eval_metrics[0]],
-        'Dice Coefficient': [eval_metrics[1]],
-        'Recall': [eval_metrics[2]]
-    })
-
-    # Concatenate the current fold's metrics DataFrame with the main summary DataFrame
-    metrics_summary = pd.concat([metrics_summary, current_fold_metrics], 
-                                ignore_index=True)
-    
-    # Plotting the DataFrame as a table
-    fig, ax = plt.subplots(figsize=(8, 3))  # Set appropriate size for your table
-    ax.axis('tight')
-    ax.axis('off')
-    the_table = table(ax, metrics_summary, loc='center')
-
-    # Save the figure as a PNG file
-    plt.savefig('figures/dataframe_table.png', dpi=300)  # Adjust dpi for different resolutions
-    plt.close(fig)  # Close the figure
-
-    fold_no += 1
-
-print(metrics_summary)
-
-################### run on whole dataset ###########################
-
-# #make dataset tensorflow-compatible
-# with open('data/images_data.pkl', 'rb') as f:
-#     images = pickle.load(f)
-
-# with open('data/masks_data.pkl', 'rb') as f:
-#     masks = pickle.load(f)
-
-# # Batches
-# batch_size = 30
-# epochs = 30
-
-# #dataset = dataset.batch(batch_size).repeat(count = epochs)
-# total_num_samples = images.shape[0]
-# steps = total_num_samples//batch_size
-
-# print("steps per epoch", steps)
-# batch_loss_history = BatchLossHistory()
-
-# # make mini dataset for testing code
-# # images = make_smaller(images)
-# # masks = make_smaller(masks)
-
-# #Create TensorFlow dataset from images and masks
-# dataset = tf.data.Dataset.from_tensor_slices((images, masks))
-# dataset = dataset.batch(batch_size) 
-
-# with open('data/test_numbers.pkl', 'rb') as f:
-#     numbers = pickle.load(f)
-# print("numbers", numbers.shape)
-
-# with open('data/test_processed.pkl', 'rb') as f:
-#     test = pickle.load(f)
-
-# print("test", test.shape)
-# print("test sample", test[0, :, :, 0])
-
-# #train model 
-# unet_model = build_unet_training_model()
-# unet_model.compile(optimizer=tf.keras.optimizers.Adam(),
-#                 loss= weighted_BCE,
-#                 metrics= [dice_coefficient, tf.keras.metrics.Recall()])
-
-# model_history = unet_model.fit(dataset, epochs = epochs, steps_per_epoch = steps, callbacks=[batch_loss_history])
-
-# #predict 
-# predict_in_batches(images, numbers)
-
-
-
-# # predictions = unet_model.predict(train)
-# # for i in range(train.shape[0]):
-# #     display_image_and_mask(train[i], predictions[i])
-
-# # predictions = apply_threshold(predictions)
-
-# # #Display original images and predicted masks
-# # for i in range(train.shape[0]):
-# #     display_image_and_mask(train[i], predictions[i])
-
-
-# # #Display original images and predicted masks
-# # for i in range(test.shape[0]):
-# #     display_image_and_mask(test[i], masks_pred[i])
+#predict 
+predict_in_batches(images, numbers, batch_size, threshold)
