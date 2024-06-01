@@ -4,13 +4,14 @@ from tensorflow import keras
 from keras import layers, models
 import numpy as np
 import pickle 
-from make_sample_test import make_smaller
+from data.make_sample_test import make_smaller
 import pandas as pd 
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from PIL import Image
 from sklearn.model_selection import StratifiedKFold
 from pandas.plotting import table 
+from skimage import io, measure, morphology, color
 
 
 ####################### functions and classes for running model #####################
@@ -31,7 +32,7 @@ class BatchLossHistory(tf.keras.callbacks.Callback):
         #plt.show()
         plt.savefig('figures/batch_loss.png')
 
-def weighted_BCE(target, output, weights = [1, 200]):
+def weighted_BCE(target, output, weights = [1, 190]):
     target = tf.convert_to_tensor(target)
     output = tf.convert_to_tensor(output)
     weights = tf.convert_to_tensor(weights, dtype=target.dtype)
@@ -104,7 +105,7 @@ def build_unet_base():
 
 def threshold_lambda(x, threshold):
     thresholded = tf.cast(x > threshold, tf.float32)
-    tf.print("Thresholded Output:", thresholded)
+    #tf.print("Thresholded Output:", thresholded)
     return thresholded
 
 def print_tensor(x, message= "output"):
@@ -144,16 +145,16 @@ def dice_coefficient(y_true, y_pred, smooth=1e-6):
 
 
 ################### run on whole dataset ###########################
-with open('data/images_data.pkl', 'rb') as f:
+with open('data/images_preprocessed.pkl', 'rb') as f:
     images = pickle.load(f)
 
-with open('data/masks_data.pkl', 'rb') as f:
+with open('data/masks_preprocessed.pkl', 'rb') as f:
     masks = pickle.load(f)
 
 # initialize variables
 batch_size = 30
 epochs = 30
-threshold = 0.9
+threshold = 0.8
 
 total_num_samples = images.shape[0]
 steps = total_num_samples//batch_size
@@ -180,6 +181,17 @@ with open('data/test_processed.pkl', 'rb') as f:
 # print("test sample", test[0, :, :, 0])
 
 #train model 
+# tf.keras.callbacks.EarlyStopping(
+#     monitor= weighted_BCE,
+#     min_delta=0,
+#     patience=3,
+#     verbose=0,
+#     mode='auto',
+#     baseline=None,
+#     restore_best_weights=False,
+#     start_from_epoch=10
+# )
+
 unet_model = build_unet_training_model()
 unet_model.compile(optimizer=tf.keras.optimizers.Adam(),
                 loss= weighted_BCE,
@@ -208,7 +220,7 @@ def apply_threshold(predictions, threshold):
 def save_images_as_png(images_stack, numbers_array, output_directory):
     # Create the output directory if it does not exist
     os.makedirs(output_directory, exist_ok=True)
-    print("images stack", images_stack.shape)
+    #print("images stack", images_stack.shape)
 
     # Iterate through the images stack and numbers array simultaneously
     for img_array, number in zip(images_stack, numbers_array):
@@ -220,7 +232,7 @@ def save_images_as_png(images_stack, numbers_array, output_directory):
         # Display the unique elements with their counts
         # for element, count in zip(unique_elements, counts):
         #     print("saving", f"{count} {element}s")
-        
+        #display_image_and_mask(img_array, img_array, img_array, img_array)
         filename = os.path.join(output_directory, f"{number}_mask.png")
         img = img.convert('L')
         img.save(filename)
@@ -236,12 +248,12 @@ def predict_in_batches(data, numbers, batch_size, threshold):
 
         #make predictions 
         batch_predictions = unet_model.predict(data[start:end])
-        print("batch_predictions", batch_predictions.shape)
+        #print("batch_predictions", batch_predictions.shape)
         batch_numbers = numbers[start:end]
-        print("batch_numbers", len(batch_numbers), '\n', batch_numbers)
+        #print("batch_numbers", len(batch_numbers), '\n', batch_numbers)
         predictions_thresh = apply_threshold(batch_predictions, threshold)
-        print("predictions thresh", predictions_thresh.shape)
-        save_images_as_png(predictions_thresh, batch_numbers, 'output_images')
+        #print("predictions thresh", predictions_thresh.shape)
+        save_images_as_png(predictions_thresh, batch_numbers, 'output_images_test')
 
 def display_image_and_mask(image, mask, predicted, thresholded):
 
@@ -271,5 +283,7 @@ def display_image_and_mask(image, mask, predicted, thresholded):
 
     plt.show()
 
+
 #predict 
-predict_in_batches(images, numbers, batch_size, threshold)
+predict_in_batches(test, numbers, batch_size, threshold)
+
