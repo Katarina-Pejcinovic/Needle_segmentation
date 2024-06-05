@@ -8,6 +8,7 @@ def load_images_and_masks(image_dir, mask_dir):
     dataset2D = dict()
     image_files = os.listdir(image_dir)
     mask_files = os.listdir(mask_dir)
+    imageIDs = []
 
     for image_file in image_files:
         
@@ -20,6 +21,7 @@ def load_images_and_masks(image_dir, mask_dir):
         image_path = os.path.join(image_dir, image_file)
         mask_file_prefix = f"{image_number}_mask"
         matching_mask_files = [mask for mask in mask_files if mask.startswith(mask_file_prefix)]
+        imageIDs.append(image_number)
 
         if len(matching_mask_files) != 1:
             continue  # Skip if there are no matching masks or multiple matching masks
@@ -33,6 +35,11 @@ def load_images_and_masks(image_dir, mask_dir):
 
         dataset2D[image_number] = (image, mask)
 
+        print("image Ids", imageIDs)
+        
+        with open('imageIDs.pkl', 'wb') as f:
+            pickle.dump(imageIDs, f)
+
     return dataset2D
 
 def save_dataset(dataset, save_path):
@@ -45,16 +52,16 @@ image_directory = "/Users/katarinapejcinovic/Library/CloudStorage/OneDrive-UCLAI
 mask_directory = "/Users/katarinapejcinovic/Library/CloudStorage/OneDrive-UCLAITServices/Documents/college_stuff/Masters_classes/Advances_in_imaging/be224b-sp24-project/trainMasks/trainMasks"
 save_path = "dataset_dict.pkl"
 
-# Load images and masks into dictionary
-#dataset2D = load_images_and_masks(image_directory, mask_directory)
+#Load images and masks into dictionary
+dataset2D = load_images_and_masks(image_directory, mask_directory)
 
-# Save dataset
-#save_dataset(dataset2D, save_path)
+#Save dataset
+save_dataset(dataset2D, save_path)
 
 # with open('dataset_dict.pkl', 'rb') as f:
 #     dataset = pickle.load(f)
 
-#check if dictionary outputs expected results
+# #check if dictionary outputs expected results
 # print(dataset.keys())
 # number_to_access = "1164"
 # if number_to_access in dataset:
@@ -68,14 +75,17 @@ save_path = "dataset_dict.pkl"
 
 # else:
 #     print(f"No data found for number {number_to_access}")
-    # # Example usage:
-    # # Access image and mask for a specific number
-    # number_to_access = "12345"  # Use the full ID number here
-    # if number_to_access in dataset2D:
-    #     image, mask = dataset2D[number_to_access]
-    #     print(f"Image shape: {image.shape}, Mask shape: {mask.shape}")
-    # else:
-    #     print(f"No data found for number {number_to_access}")
+#     # Example usage:
+#     # Access image and mask for a specific number
+#     number_to_access = "12345"  # Use the full ID number here
+#     if number_to_access in dataset2D:
+#         image, mask = dataset2D[number_to_access]
+#         print(f"Image shape: {image.shape}, Mask shape: {mask.shape}")
+#     else:
+#         print(f"No data found for number {number_to_access}")
+
+
+
 
 
 

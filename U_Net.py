@@ -219,7 +219,7 @@ def display_image_and_mask(image, mask, predicted, thresholded):
 
     plt.subplot(1, 4, 2)
     plt.imshow(mask[:, :, 0], cmap='gray')  
-    plt.title('OG mask')
+    plt.title('Ground Truth')
     plt.axis('off')
 
     plt.subplot(1, 4, 3)
@@ -319,8 +319,8 @@ for train_index, val_index in skf.split(images, labels):
     masks_thresh = unet_inference_model.predict(image_dataset)
 
     # #print images of original, mask, and predicted 
-    # for i in range(images[val_index].shape[0]):
-    #     display_image_and_mask(images[val_index][i], masks[val_index][i], masks_pred[i], masks_thresh[i])
+    for i in range(images[val_index].shape[0]):
+        display_image_and_mask(images[val_index][i], masks[val_index][i], masks_pred[i], masks_thresh[i])
 
     # Create a DataFrame for the current fold's metrics
     current_fold_metrics = pd.DataFrame({
