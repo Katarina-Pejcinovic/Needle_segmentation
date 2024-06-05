@@ -178,7 +178,7 @@ def predict_in_batches(data, numbers, batch_size, threshold):
         #print("batch_numbers", len(batch_numbers), '\n', batch_numbers)
         predictions_thresh = apply_threshold(batch_predictions, threshold)
         #print("predictions thresh", predictions_thresh.shape)
-        save_images_as_png(predictions_thresh, batch_numbers, 'output_images_not_final')
+        save_images_as_png(predictions_thresh, batch_numbers, 'output_images_test')
 
 def save_images_as_png(images_stack, numbers_array, output_directory):
     # Create the output directory if it does not exist
