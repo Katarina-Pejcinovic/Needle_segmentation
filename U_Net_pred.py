@@ -4,14 +4,12 @@ from tensorflow import keras
 from keras import layers, models
 import numpy as np
 import pickle 
-from data.make_sample_test import make_smaller
 import pandas as pd 
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from PIL import Image
 from sklearn.model_selection import StratifiedKFold
 from pandas.plotting import table 
-from skimage import io, measure, morphology, color
 from tensorflow.keras.models import load_model
 
 
