@@ -12,9 +12,11 @@ from PIL import Image
 from sklearn.model_selection import StratifiedKFold
 from pandas.plotting import table 
 from skimage import io, measure, morphology, color
+from tensorflow.keras.models import load_model
 
 
-####################### functions and classes for running model #####################
+
+###################### custom functions for tensorflow ################
 
 class BatchLossHistory(tf.keras.callbacks.Callback):
     def __init__(self):
@@ -144,28 +146,64 @@ def dice_coefficient(y_true, y_pred, smooth=1e-6):
     return dice
 
 
-################### run on whole dataset ###########################
-with open('data/images_preprocessed.pkl', 'rb') as f:
-    images = pickle.load(f)
+# Load the model from the file
+loaded_model = load_model('final_model.h5', custom_objects={'weighted_BCE': weighted_BCE, 'dice_coefficient': dice_coefficient})
 
-with open('data/masks_preprocessed.pkl', 'rb') as f:
-    masks = pickle.load(f)
+##################### Predictions auxilliary functions ########################
+def apply_threshold(predictions, threshold):
+    """Apply a binary threshold to segmentation predictions."""
+    unique_elements, counts = np.unique(predictions, return_counts=True)
+    #for element, count in zip(unique_elements, counts):
+        #print("before thresholding", f"{count} {element}s")
+    
+    # Threshold the predictions
+    predictions_thresholded = np.where(predictions < threshold, 0, 1)
+    unique_elements, counts = np.unique(predictions_thresholded, return_counts=True)
 
-# initialize variables
-batch_size = 30
-epochs = 30
-threshold = 0.8
+    # Display the unique elements with their counts
+    #for element, count in zip(unique_elements, counts):
+        #print("After thresholding", f"{count} {element}s")
 
-total_num_samples = images.shape[0]
-steps = total_num_samples//batch_size
-print("steps per epoch", steps)
+    return predictions_thresholded
 
-batch_loss_history = BatchLossHistory()
+def predict_in_batches(data, numbers, batch_size, threshold):
+    num_samples = data.shape[0]
+    batch_numbers = []
 
-#Create TensorFlow dataset from images and masks
-dataset = tf.data.Dataset.from_tensor_slices((images, masks))
-dataset = dataset.batch(batch_size).repeat(count = epochs)
+    for start in range(0, num_samples, batch_size):
+        end = min(start + batch_size, num_samples)
 
+        #make predictions 
+        batch_predictions = loaded_model.predict(data[start:end])
+        #print("batch_predictions", batch_predictions.shape)
+        batch_numbers = numbers[start:end]
+        #print("batch_numbers", len(batch_numbers), '\n', batch_numbers)
+        predictions_thresh = apply_threshold(batch_predictions, threshold)
+        #print("predictions thresh", predictions_thresh.shape)
+        save_images_as_png(predictions_thresh, batch_numbers, 'output_images_not_final')
+
+def save_images_as_png(images_stack, numbers_array, output_directory):
+    # Create the output directory if it does not exist
+    os.makedirs(output_directory, exist_ok=True)
+    #print("images stack", images_stack.shape)
+
+    # Iterate through the images stack and numbers array simultaneously
+    for img_array, number in zip(images_stack, numbers_array):
+        # Convert numpy array to PIL Image
+        img_array = (img_array * 255).astype(np.uint8)
+        #print("img_array", img_array.shape)
+        img = Image.fromarray(img_array.squeeze(axis=-1))  # Remove singleton channel axis if present
+        #unique_elements, counts = np.unique(img, return_counts=True)
+        # Display the unique elements with their counts
+        # for element, count in zip(unique_elements, counts):
+        #     print("saving", f"{count} {element}s")
+        #display_image_and_mask(img_array, img_array, img_array, img_array)
+        filename = os.path.join(output_directory, f"{number}_mask.png")
+        img = img.convert('L')
+        img.save(filename)
+
+        #print(f"Saved image {number}.png")
+######################## Predictions #######################
 with open('data/test_numbers.pkl', 'rb') as f:
     numbers = pickle.load(f)
 print("numbers", numbers.shape)
@@ -173,16 +211,7 @@ print("numbers", numbers.shape)
 with open('data/test_processed.pkl', 'rb') as f:
     test = pickle.load(f)
 
-#train model
-unet_model = build_unet_training_model()
-unet_model.compile(optimizer=tf.keras.optimizers.Adam(),
-                loss= weighted_BCE,
-                metrics= [dice_coefficient, tf.keras.metrics.Recall()])
 
-model_history = unet_model.fit(dataset, epochs = epochs, steps_per_epoch = steps, callbacks=[batch_loss_history])
-
-# Save the entire model to a file
-unet_model.save('final_model.h5')
-
-
-
+batch_size = 30
+threshold = 0.8 
+predict_in_batches(test, numbers, batch_size, threshold)
