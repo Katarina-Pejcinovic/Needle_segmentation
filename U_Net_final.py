@@ -29,7 +29,7 @@ class BatchLossHistory(tf.keras.callbacks.Callback):
         plt.xlabel('Batch Number')
         plt.ylabel('Loss')
         #plt.show()
-        plt.savefig('figures/batch_loss.png')
+        plt.savefig('batch_loss.png')
 
 def weighted_BCE(target, output, weights = [1, 190]):
     target = tf.convert_to_tensor(target)
