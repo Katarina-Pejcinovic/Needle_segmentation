@@ -4,7 +4,6 @@ from tensorflow import keras
 from keras import layers, models
 import numpy as np
 import pickle 
-from data.make_sample_test import make_smaller
 import pandas as pd 
 import matplotlib.pyplot as plt
 import tensorflow as tf
