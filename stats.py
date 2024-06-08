@@ -11,12 +11,7 @@ measurements = [mean1, mean2, mean3]  # Replace mean1, mean2, and mean3 with you
 comparison_mean = 0.296
 
 # Perform one-sample one-sided t-test
-t_statistic, p_value = stats.ttest_1samp(measurements, comparison_mean)
+t_statistic, p_value = stats.ttest_1samp(measurements, comparison_mean, alternative= 'greater')
 
-# Adjust the p-value for one-sided test
-if t_statistic > 0:
-    p_value /= 2
-else:
-    p_value = 1 - p_value / 2
 
 print(f"one-sided p-value: {p_value}")
