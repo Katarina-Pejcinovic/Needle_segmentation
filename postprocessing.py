@@ -13,15 +13,15 @@ if not os.path.exists(output_directory):
     os.makedirs(output_directory)
 
 # Parameters
-min_area = 90  # Adjust this to your needs
+min_area = 90 
 
 def process_image(file_path):
-    # Load the image
+
     image = io.imread(file_path, as_gray=True)
 
     # Apply connected components
-    label_image = measure.label(image, connectivity=2)  # 4-connectivity or 8-connectivity
-
+    label_image = measure.label(image, connectivity=2)  
+    
     # Create a boolean array where True indicates small regions
     small_objects = np.bincount(label_image.ravel()) < min_area
     small_objects[0] = False  # Ignore background
@@ -34,7 +34,7 @@ def process_image(file_path):
 
     return final_image
 
-# Loop through all images in the input directory
+# Loop through all images in directory
 for filename in os.listdir(input_directory):
 
     file_path = os.path.join(input_directory, filename)
@@ -45,9 +45,3 @@ for filename in os.listdir(input_directory):
 
     # Save the processed image
     io.imsave(output_path, processed_image)
-
-    # # Optionally display the image
-    # plt.imshow(processed_image, cmap='gray')
-    # plt.title('Processed Image')
-    # plt.axis('off')
-    # plt.show()

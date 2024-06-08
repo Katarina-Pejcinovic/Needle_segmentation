@@ -30,7 +30,7 @@ def aug_images_and_masks(image_dir, mask_dir, labels, output_image_dir, output_m
             
             # Random contrast adjustment
             enhancer = ImageEnhance.Contrast(image)
-            factor = random.uniform(0.5, 1.8)  # Randomly chosen factor for contrast adjustment
+            factor = random.uniform(0.5, 1.8)  
             image = enhancer.enhance(factor)
             
             # Save the processed image and mask to the output directories
@@ -46,7 +46,7 @@ def aug_images_and_masks(image_dir, mask_dir, labels, output_image_dir, output_m
 def contains_white_pixels(image):
     # Convert the image to grayscale
     grayscale_image = image.convert("L")
-    # Convert the grayscale image to a NumPy array
+
     np_image = np.array(grayscale_image)
     # Check if any pixel is white (255)
     return np.any(np_image == 255)
@@ -62,12 +62,13 @@ def create_labels(image_dir):
         if contains_white_pixels(image):
             labels[i] = 1
         
-        # Collect the file name and its corresponding label
+        
         print(f"File: {file_name}, Label: {labels[i]}")
 
     return labels
 
 def rename_and_copy_masks(mask_dir, new_dir):
+    
     # Create the new directory if it doesn't exist
     if not os.path.exists(new_dir):
         os.makedirs(new_dir)
@@ -92,12 +93,12 @@ def delete_random_images_and_masks(image_dir, mask_dir, num_to_delete):
     image_files = [f for f in os.listdir(image_dir) if f.endswith('.jpg')]
     mask_files = [f for f in os.listdir(mask_dir) if f.endswith('.png')]
     
-    # Ensure the number of image files matches the number of mask files
+    # Ensure the number of image files match
     if len(image_files) != len(mask_files):
         print("The number of images does not match the number of masks.")
         return
     
-    # Check if the number of files to delete is more than available files
+    # Check if the number of files to delete is more than available
     if num_to_delete > len(image_files):
         print("The number of images to delete exceeds the number of available images.")
         return
@@ -121,7 +122,7 @@ def rename_files_with_111(image_dir, mask_dir):
     # Rename image files
     for file_name in os.listdir(image_dir):
         if file_name.endswith('.jpg'):
-            base_name = file_name[:-4]  # Remove the .jpg extension
+            base_name = file_name[:-4] 
             new_file_name = base_name + '111.jpg'
             old_file_path = os.path.join(image_dir, file_name)
             new_file_path = os.path.join(image_dir, new_file_name)
@@ -132,7 +133,7 @@ def rename_files_with_111(image_dir, mask_dir):
     for file_name in os.listdir(mask_dir):
         if file_name.endswith('.jpg') or file_name.endswith('.png'):
             base_name = file_name[:-4]  # Remove the .jpg or .png extension
-            new_file_name = base_name + '111_mask' + file_name[-4:]  # Add 'a' before the extension
+            new_file_name = base_name + '111_mask' + file_name[-4:] 
             old_file_path = os.path.join(mask_dir, file_name)
             new_file_path = os.path.join(mask_dir, new_file_name)
             os.rename(old_file_path, new_file_path)
@@ -155,9 +156,6 @@ with open('data/needle_label_no_aug', 'wb') as f:
 
 #make augmented images and corresponding masks
 aug_images_and_masks(image_directory, new_directory_mask, labels, output_image_directory, output_mask_directory)
-#create binary labels for needle/no needle
-
-
 
 #randomly delete half of augmented images
 num_to_delete = 176
