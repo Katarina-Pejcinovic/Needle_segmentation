@@ -11,12 +11,12 @@ This documentation provides instructions on how to train and make predictions wi
 
 1. Clone the repository
 
-    ```
+   ```
     git clone https://github.com/Katarina-Pejcinovic/Needle_segmentation.git
-    ```
+   ```
 
 
-2. The data and model weights are available on Google Drive here: 
+2. The data and model weights are available on Google Drive upon request. 
 
     The folder contains: 
 
