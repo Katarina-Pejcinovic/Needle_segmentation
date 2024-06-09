@@ -1,5 +1,5 @@
 
-**Needle Segmentation Project Documentation **
+# Needle Segmentation Project Documentation
 
 This documentation provides instructions on how to train and make predictions with the code available at: [https://github.com/Katarina-Pejcinovic/Needle_segmentation](https://github.com/Katarina-Pejcinovic/Needle_segmentation)
 
