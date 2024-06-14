@@ -1,17 +1,20 @@
 import numpy as np
 from scipy import stats
+from scipy.stats import wilcoxon
 
-# Your three measurements
-mean1 = 0.296*0.29362 + 0.704*0.619
-mean2 = 0.296*0.26197 + 0.704*0.686
-mean3 = 0.296*0.39792 + 0.704*0.604
-measurements = [mean1, mean2, mean3]  # Replace mean1, mean2, and mean3 with your actual measurements
+#measurements 
+Dice = [0.29362,0.26197, 0.39792] 
+recall = [0.619, 0.686, 0.604]
+Dice = np.array(Dice)
+recall = np.array(recall)
+
 
 # Mean to compare against
-comparison_mean = 0.296
+comparison_mean = 0.3
 
-# Perform one-sample one-sided t-test
-t_statistic, p_value = stats.ttest_1samp(measurements, comparison_mean, alternative= 'greater')
+# Perform Wilcoxon signed-rank test
+recall_stat, recall_p = wilcoxon(recall - comparison_mean, alternative='greater')
+dice_stat, dice_p = wilcoxon(Dice - comparison_mean, alternative='greater')
 
-
-print(f"one-sided p-value: {p_value}")
+print(f'recall: p-value={recall_p}')
+print(f'DICE:  p-value={dice_p}')
