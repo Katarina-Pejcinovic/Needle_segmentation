@@ -67,4 +67,4 @@ def processImages(imgDirectory: str, saveDirectory: str = os.getcwd(), returnDF:
 
     if returnDF: return df
 
-processImages('output_images')
+processImages('output_images_postprocessing')
