@@ -62,7 +62,7 @@ Once you have created the weights or you are using the weights already provided:
 1. In terminal, run:
 
     ```
-    python U_Net_predictions.py
+    python U_Net_pred.py
     ```
 
 
